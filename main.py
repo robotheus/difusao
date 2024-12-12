@@ -2,12 +2,11 @@ import networkx as nx
 import ndlib.models.ModelConfig as mc
 import ndlib.models.epidemics as ep
 import json
-import random
 
 """
     Passos para o IC:
         - Definir o grafo: coautoria
-        - Definir o seed inicial: 10%, 20%, 30%
+        - Definir o seed inicial: 10%
         - Definir a probabilidade de cada aresta: p(w, v)/max(p)
 """
 
@@ -18,34 +17,42 @@ ranks       = ['dados/CG-G.json', 'dados/CI-G.json', 'dados/CP-G.json',
                'dados/CI-HG-s=1.json', 'dados/CI-HG-s=2.json', 'dados/CI-HG-s=3.json',
                'dados/CP-HG-s=1.json', 'dados/CP-HG-s=2.json', 'dados/CP-HG-s=3.json',]
 
-for rank in ranks:
+types = ["ranks", "aleatorio"]
 
-    with open(rank, "r") as file:
-        data = json.load(file)
+for type in types:
+    for rank in ranks:
 
-    seeds = sorted(data.items(), key=lambda item: item[1], reverse=True)[:496] 
-    seeds = [nome for nome, _ in seeds]
+        with open(rank, "r") as file:
+            data = json.load(file)
 
-    model = ep.IndependentCascadesModel(graph)
+        seeds = sorted(data.items(), key=lambda item: item[1], reverse=True)[:496] # 10% da rede
+        seeds = [nome for nome, _ in seeds]
 
-    config = mc.Configuration()
-    config.add_model_initial_configuration("Infected", seeds)
+        model = ep.IndependentCascadesModel(graph)
 
-    # configuração da probabilidade de cada aresta - max = 19
-    max_weight = max([data['weight'] for u, v, data in graph.edges(data=True)])
+        config = mc.Configuration()
+        
+        if type == "ranks":
+            config.add_model_initial_configuration("Infected", seeds)
+        elif type == "aleatorio":
+            config.add_model_parameter("fraction_infected", 0.1)
+        else:
+            print("erro")
 
-    for e in graph.edges(): 
-        config.add_edge_configuration("threshold", e, (graph.edges()[e]['weight']/max_weight))
+        # configuração da probabilidade de cada aresta - max = 19
+        max_weight = max([data['weight'] for u, v, data in graph.edges(data=True)])
+        
+        for e in graph.edges(): 
+            config.add_edge_configuration("threshold", e, (graph.edges()[e]['weight']/max_weight))
 
-    model.set_initial_status(config)
+        model.set_initial_status(config)
 
-    iterations = model.iteration_bunch(100, progress_bar=True, node_status=False)
-    print(model.params)
+        iterations = model.iteration_bunch(100, progress_bar=True, node_status=False)
+        
+        # limpar coisas que eu nao quero no resultado
+        for i in iterations:
+            for key in ["status", "status_delta"]:
+                i.pop(key, None)
 
-    # limpar coisas que eu nao quero no resultado
-    for i in iterations:
-        for key in ["status", "status_delta"]:
-            i.pop(key, None)
-
-    with open(f"resultados/{rank.split(sep='/')[1]}", "w") as file:
-        json.dump(iterations, file, indent=4)
+        with open(f"resultados-{type}/{rank.split(sep='/')[1]}", "w") as file:
+            json.dump(iterations, file, indent=4)
